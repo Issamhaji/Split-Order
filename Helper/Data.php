@@ -34,22 +34,4 @@ class Data extends \Magento\Framework\App\Helper\AbstractHelper
             $storeId
         );
     }
-
-    public function getQtyType($storeId = null)
-    {
-        return $this->scopeConfig->getValue(
-            'training_split_order/options/attribute_qty',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
-        );
-    }
-
-    public function getBackorder($storeId = null):bool
-    {
-        return (bool) $this->scopeConfig->isSetFlag(
-            'training_split_order/options/qty_backorder',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
-        );
-    }
 }

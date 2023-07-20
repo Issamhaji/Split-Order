@@ -9,84 +9,55 @@ use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\QuoteFactory;
 use Magento\Framework\Event\ManagerInterface;
 use Training\SplitOrder\Api\QuoteInterface;
+use Psr\Log\LoggerInterface as PsrLoggerInterface;
 
-/**
- * Class SplitQuote
- * Interceptor to \Magento\Quote\Model\QuoteManagement
- */
 class SplitQuote
 {
     /**
-     * @var CartRepositoryInterface
+     * @var PsrLoggerInterface
      */
+    private $logger;
     private $quoteRepository;
-
-    /**
-     * @var QuoteFactory
-     */
     private $quoteFactory;
-
-    /**
-     * @var ManagerInterface
-     */
     private $eventManager;
+    private $quote;
 
-    /**
-     * @var QuoteInterface
-     */
-    private $quoteHandler;
 
-    /**
-     * @param CartRepositoryInterface $quoteRepository
-     * @param QuoteFactory $quoteFactory
-     * @param ManagerInterface $eventManager
-     * @param QuoteInterface $quoteHandler
-     */
     public function __construct(
+        PsrLoggerInterface $logger,
         CartRepositoryInterface $quoteRepository,
         QuoteFactory $quoteFactory,
         ManagerInterface $eventManager,
-        QuoteInterface $quoteHandler
+        QuoteInterface $quote
     ) {
+        $this->logger = $logger;
         $this->quoteRepository = $quoteRepository;
         $this->quoteFactory = $quoteFactory;
         $this->eventManager = $eventManager;
-        $this->quoteHandler = $quoteHandler;
+        $this->quote = $quote;
     }
 
-    /**
-     * Places an order for a specified cart.
-     *
-     * @param QuoteManagement $subject
-     * @param callable $proceed
-     * @param int $cartId
-     * @param string $payment
-     * @return mixed
-     * @throws LocalizedException
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     * @see \Magento\Quote\Api\CartManagementInterface
-     */
+
     public function aroundPlaceOrder(QuoteManagement $subject, callable $proceed, $cartId, $payment = null)
     {
         $currentQuote = $this->quoteRepository->getActive($cartId);
 
         // Separate all items in quote into new quotes.
-        $quotes = $this->quoteHandler->normalizeQuotes($currentQuote);
+        $quotes = $this->quote->normalizeQuotes($currentQuote);
         if (empty($quotes)) {
+            $this->logger->info('No quotes found for splitting.');
             return $result = array_values([($proceed($cartId, $payment))]);
         }
         // Collect list of data addresses.
-        $addresses = $this->quoteHandler->collectAddressesData($currentQuote);
+        $addresses = $this->quote->collectAddressesData($currentQuote);
 
-        /** @var \Magento\Sales\Api\Data\OrderInterface[] $orders */
         $orders = [];
         $orderIds = [];
         foreach ($quotes as $items) {
-            /** @var \Magento\Quote\Model\Quote $split */
             $split = $this->quoteFactory->create();
 
             // Set all customer definition data.
-            $this->quoteHandler->setCustomerData($currentQuote, $split);
+            $this->quote->setCustomerData($currentQuote, $split);
             $this->toSaveQuote($split);
 
             // Map quote items.
@@ -95,7 +66,7 @@ class SplitQuote
                 $item->setId(null);
                 $split->addItem($item);
             }
-            $this->quoteHandler->populateQuote($quotes, $split, $items, $addresses, $payment);
+            $this->quote->populateQuote($quotes, $split, $items, $addresses, $payment);
 
             // Dispatch event as Magento standard once per each quote split.
             $this->eventManager->dispatch(
@@ -112,42 +83,25 @@ class SplitQuote
             if (null == $order) {
                 throw new LocalizedException(__('Please try to place the order again.'));
             }
+            $this->logger->info('Order ID: ' . $order->getId());
         }
         $currentQuote->setIsActive(false);
         $this->toSaveQuote($currentQuote);
 
-        $this->quoteHandler->defineSessions($split, $order, $orderIds);
+        $this->quote->defineSessions($split, $order, $orderIds);
 
         $this->eventManager->dispatch(
             'checkout_submit_all_after',
             ['orders' => $orders, 'quote' => $currentQuote]
         );
-        return $this->getOrderKeys($orderIds);
+
+        $this->logger->info('Order are splited successfully');
     }
 
-    /**
-     * Save quote
-     *
-     * @param \Magento\Quote\Api\Data\CartInterface $quote
-     * @return \Training\SplitOrder\Plugin\SplitQuote
-     */
     private function toSaveQuote($quote)
     {
         $this->quoteRepository->save($quote);
 
         return $this;
-    }
-
-    /**
-     * @param array $orderIds
-     * @return array
-     */
-    private function getOrderKeys($orderIds)
-    {
-        $orderValues = [];
-        foreach (array_keys($orderIds) as $orderKey) {
-            $orderValues[] = (string) $orderKey;
-        }
-        return array_values($orderValues);
     }
 }

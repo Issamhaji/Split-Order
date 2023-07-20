@@ -6,15 +6,8 @@ namespace Training\SplitOrder\Model\Config\Source;
 use Magento\Framework\Data\OptionSourceInterface;
 use Magento\Catalog\Model\ResourceModel\Product\Attribute\CollectionFactory;
 
-/**
- * Class Attributes
- * Responsible to load the attributes.
- */
 class Attributes implements OptionSourceInterface
 {
-    /**
-     * @var array List of attributes that shouldn't appear on the list.
-     */
     const BLACK_LIST = [
         'custom_design',
         'custom_design_from',
@@ -35,30 +28,15 @@ class Attributes implements OptionSourceInterface
         'required_options',
     ];
 
-    /**
-     * @var CollectionFactory
-     */
     private $collection;
-
-    /**
-     * @var array Options list
-     */
     private $options;
 
-    /**
-     * @param CollectionFactory $collectionFactory
-     */
     public function __construct(
         CollectionFactory $collectionFactory
     ) {
         $this->collection = $collectionFactory;
     }
 
-    /**
-     * Get options as array
-     *
-     * @return array
-     */
     public function toOptionArray()
     {
         if ($this->options) {

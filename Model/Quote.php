@@ -8,31 +8,34 @@ use Magento\Quote\Api\CartManagementInterface;
 use Magento\Customer\Api\Data\GroupInterface;
 use Training\SplitOrder\Api\QuoteInterface;
 use Training\SplitOrder\Helper\Data as HelperData;
-use Training\SplitOrder\Api\AttributesInterface;
+use Psr\Log\LoggerInterface;
 
-class QuoteHandler implements QuoteInterface
+
+class Quote implements QuoteInterface
 {
+    protected $logger;
     private $checkoutSession;
     private $helperData;
-    private $extensionAttributes;
 
     public function __construct(
+        LoggerInterface $logger,
         CheckoutSession $checkoutSession,
-        HelperData $helperData,
-        AttributesInterface $extensionAttributes
+        HelperData $helperData
     ) {
+        $this->logger = $logger;
         $this->checkoutSession = $checkoutSession;
         $this->helperData = $helperData;
-        $this->extensionAttributes = $extensionAttributes;
     }
 
     public function normalizeQuotes($quote)
     {
         if (!$this->helperData->isActive()) {
+            $this->logger->info('not active.');
             return false;
         }
         $attributes = $this->helperData->getAttributes();
         if (empty($attributes)) {
+            $this->logger->info('attribute not found');
             return false;
         }
         $groups = [];
@@ -42,7 +45,9 @@ class QuoteHandler implements QuoteInterface
             $product = $item->getProduct();
 
             $attribute = $this->getProductAttributes($product, $attributes);
+            $this->logger->info('attribute value: ' . $attribute);
             if ($attribute === false) {
+                $this->logger->info('attributes is not Set !!');
                 return false;
             }
             $groups[$attribute][] = $item;
@@ -56,10 +61,6 @@ class QuoteHandler implements QuoteInterface
 
     public function getProductAttributes($product, $attributeCode)
     {
-        $extensionAttribute = $this->extensionAttributes->loadValue($product, $attributeCode);
-        if ($extensionAttribute !== false) {
-            return $extensionAttribute;
-        }
         $attributeObject = $product->getResource()->getAttribute($attributeCode);
 
         $attributeValue = $attributeObject->getFrontend()->getValue($product);
@@ -69,7 +70,7 @@ class QuoteHandler implements QuoteInterface
         return $attributeValue;
     }
 
-    public function collectAddressesData($quote)
+    public function collectAddressesData($quote):array
     {
         $billing = $quote->getBillingAddress()->getData();
         unset($billing['id']);
